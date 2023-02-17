@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from src.ecer.hyperparams import Hyperparams
 from src.ecer.dll.DLL import KIPR
-from time import time_ns
+import time
 
 
 class AbstractRobot:
@@ -14,9 +14,10 @@ class AbstractRobot:
                             prevent disqualification due to inaccurate measurements.
         """
         self.__shutdown_in_nano = shutdown_in * 1e9
+        self.__scheduled = []
 
-        Hyperparams.initialise(resource_path)
-        KIPR.shut_down_in(shutdown_in)
+        Hyperparams.RESOURCE_PATH = resource_path
+        KIPR.shut_down_in(int(shutdown_in))
         self.__schedule_loop()
 
     @abstractmethod
@@ -48,11 +49,25 @@ class AbstractRobot:
         """
         pass
 
+    def repeat_every_interval(self, ticks: int, callback: classmethod) -> None:
+        """
+        Schedule a repeating task.
+        :param ticks: The ticks that should pass between the execution
+        :param callback: The method that should get run
+        :return: Nothing
+        """
+        self.__scheduled.append((ticks, callback))
+
     def __schedule_loop(self):
         self.setup()
-        ends_at = time_ns() + self.__shutdown_in_nano
+        ends_at = time.time() + self.__shutdown_in_nano
         try:
-            while time_ns() >= ends_at:
+            tick = 0
+            while time.time() < ends_at:
+                tick += 1
+                for task in self.__scheduled:
+                    if tick % task[0] == 0:
+                        task[1]()
                 self.loop()
         finally:
             self.shutdown()
