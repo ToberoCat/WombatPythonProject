@@ -1,7 +1,9 @@
-from abc import abstractmethod
-from src.ecer.hyperparams import Hyperparams
-from src.ecer.dll.DLL import KIPR
 import time
+from abc import abstractmethod
+
+from src.ecer.dll.DLL import KIPR
+from src.ecer.hyperparams import Hyperparams
+from src.ecer.robot.Components import BaseRobotComponent
 
 
 class AbstractRobot:
@@ -14,9 +16,9 @@ class AbstractRobot:
                             prevent disqualification due to inaccurate measurements.
         """
         self.__shutdown_in_nano = shutdown_in * 1e9
-        self.__scheduled = []
+        self.__components = []
 
-        Hyperparams.RESOURCE_PATH = resource_path
+        Hyperparams.initialise(resource_path)
         KIPR.shut_down_in(int(shutdown_in))
         self.__schedule_loop()
 
@@ -31,13 +33,14 @@ class AbstractRobot:
         pass
 
     @abstractmethod
-    def loop(self) -> None:
+    def loop(self, delta_time: float) -> None:
         """
         Gets called as many times as possible until the robot has to shut down.
         It's not recommended to start any new threads unless you carefully take care of them.
         Don't run heavy tasks like (almost) endless loops or any blocking delays. If you do it may result in the robot
         shutting down in time.
 
+        :param delta_time: The time between two loop calls
         :return: Nothing
         """
         pass
@@ -49,25 +52,32 @@ class AbstractRobot:
         """
         pass
 
-    def repeat_every_interval(self, ticks: int, callback: classmethod) -> None:
+    def add_component(self, component: BaseRobotComponent) -> None:
         """
-        Schedule a repeating task.
-        :param ticks: The ticks that should pass between the execution
-        :param callback: The method that should get run
+        Add a component to the general event loop
+        :param component: The component you want to add
         :return: Nothing
         """
-        self.__scheduled.append((ticks, callback))
+        self.__components.append(component)
 
     def __schedule_loop(self):
         self.setup()
-        ends_at = time.time() + self.__shutdown_in_nano
+        for component in self.__components:
+            component.setup()
+
+        last = time.time()
+        ends_at = last + self.__shutdown_in_nano
         try:
-            tick = 0
-            while time.time() < ends_at:
-                tick += 1
-                for task in self.__scheduled:
-                    if tick % task[0] == 0:
-                        task[1]()
-                self.loop()
+            while last < ends_at:
+                current = time.time()
+                delta = current - last
+
+                self.loop(delta)
+                for component in self.__components:
+                    component.loop(delta)
+
+                last = current
         finally:
+            for component in self.__components:
+                component.shutdown()
             self.shutdown()
