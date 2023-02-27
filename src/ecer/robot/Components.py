@@ -1,7 +1,14 @@
-from abc import abstractmethod
+from abc import abstractmethod, ABC
+from src.ecer.hyperparams import Hyperparams
+from src.ecer.dll.DLL import KIPR
+import time
 
 
 class BaseRobotComponent:
+    def __init__(self):
+        self.activated = True
+        self.robot = None
+
     @abstractmethod
     def setup(self) -> None:
         """
@@ -10,9 +17,9 @@ class BaseRobotComponent:
 
         :return: Nothing
         """
+        print("sertup")
         pass
 
-    @abstractmethod
     def loop(self, delta_time: float) -> None:
         """
         Gets called as many times as possible until the robot has to shut down.
@@ -31,3 +38,11 @@ class BaseRobotComponent:
         :return: Nothing
         """
         pass
+
+    def enable(self):
+        self.activated = True
+        self.robot.enabled_components.append(self)
+
+    def disable(self):
+        self.activated = False
+        self.robot.enabled_components.remove(self)
